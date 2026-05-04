@@ -172,6 +172,9 @@ async def process_user_input():
                         text_content = response_msg.content or ""
                         st.write(text_content)
                         st.session_state["memory"].add_assistant_message(content=text_content)
+                
+                # Flag successful pipeline completion
+                st.session_state["response_completed"] = True
                         
     except BaseException as e:
         # Silently swallow AnyIO/anyio TaskGroup teardown noise on Windows.
@@ -188,15 +191,21 @@ async def process_user_input():
 if user_input := st.chat_input("Say something..."):
     # Append user message to memory and render it visually
     st.session_state["memory"].add_user_message(user_input)
+    st.session_state["response_completed"] = False  # Reset state tracking
     with st.chat_message("user"):
         st.write(user_input)
 
-    # Hand off standard application run sequence to newly spun standard Event Loop thread architecture
-    try:
-        asyncio.run(process_user_input())
-    except BaseException as e:
-        # Suppress AnyIO TaskGroup teardown errors common on Windows Streamlit subprocess closing
-        if type(e).__name__ in ("ExceptionGroup", "BaseExceptionGroup"):
-            pass
-        else:
-            raise e
+    # Add a loading micro-interaction so the user knows something is happening
+    with st.spinner("AI is connecting securely to Local Services..."):
+        # Hand off standard application run sequence to newly spun standard Event Loop thread architecture
+        try:
+            asyncio.run(process_user_input())
+        except BaseException as e:
+            # We conditionally swallow TaskGroup errors ONLY if the whole pipeline succeeded.
+            if type(e).__name__ in ("ExceptionGroup", "BaseExceptionGroup") and st.session_state.get("response_completed", False):
+                pass
+            else:
+                st.error(f"Critical Pipeline Failure: {e}")
+                if hasattr(e, 'exceptions'):
+                    for sub in e.exceptions:
+                        st.error(f"Details: {sub}")
