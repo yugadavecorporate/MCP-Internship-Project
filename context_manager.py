@@ -120,7 +120,8 @@ def inject_context_to_system_prompt(
         "   - For technical questions (Python, Java, LLM implementation), use your internal knowledge or fetch local files via the MCP server.\n"
         "   - For real-time facts, current events, or dynamic data (e.g., recent awards, news, live stats), you must trigger external search or API fetch tools.\n"
         "2. Formulate your response by integrating the live facts, citations, and accurate links.\n"
-        "3. If an integrated tool or MCP server fails to return data, state clearly that you are attempting to fetch from alternative live sources, rather than providing a canned, static refusal.\n\n"
+        "3. If an integrated tool or MCP server fails to return data, state clearly that you are attempting to fetch from alternative live sources, rather than providing a canned, static refusal.\n"
+        "4. Be strictly aware of the 'current system date and local time' provided in your background data context. If the user greets you with a conflicting time (e.g., saying 'good morning' when it is evening), you must politely correct them based on the actual local time.\n\n"
         "Respond directly to the query. Ensure the answer contains precise, actionable information rather than generic statements."
     ),
 ) -> List[Dict[str, Any]]:
