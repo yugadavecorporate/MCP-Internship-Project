@@ -63,7 +63,7 @@ def read_local_file(filepath: str) -> str:
             return f"Error: File not found at {requested_path}"
             
         with open(requested_path, "r", encoding="utf-8") as f:
-            return f.read()
+            return f.read()[:4000]
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
@@ -98,7 +98,7 @@ def query_local_database(sql_query: str) -> str:
         # Format results as a list of dictionaries
         results = [dict(row) for row in rows]
         conn.close()
-        return str(results)
+        return str(results)[:4000]
         
     except sqlite3.OperationalError as e:
         return f"Database Error: {str(e)}"
@@ -126,9 +126,9 @@ def fetch_web_api(url: str, method: str = "GET") -> str:
             
             # Try to return JSON if possible, otherwise plain text
             try:
-                return str(response.json())
+                return str(response.json())[:4000]
             except ValueError:
-                return response.text
+                return response.text[:4000]
                 
     except httpx.TimeoutException:
         raise ValueError("Error: Request timed out.")
