@@ -80,107 +80,103 @@ async def process_user_input():
                     for tool in tools_response.tools
                 ]
                 
-                # Step 2: Build full context payload via context injector (includes system prompt + history)
-                messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"])
-                response = await client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=messages_payload,
-                    temperature=0.7,
-                    tools=groq_tools,
-                    tool_choice="auto",
-                )
+                # Step 2: Implement robust multi-iteration loop to support N-hops of Tool executing chains!
+                MAX_ITERATIONS = 5
                 
-                response_msg = response.choices[0].message
-                
-                # Step 3: Parse Groq response decision matrix (Tools required??)
-                if response_msg.tool_calls:
-                    
-                    # Stage into ConversationBufferMemory with tool_calls list
-                    st.session_state["memory"].add_assistant_message(
-                        content=response_msg.content,
-                        tool_calls=[
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments
-                                }
-                            }
-                            for tc in response_msg.tool_calls
-                        ]
-                    )
-                    
-                    # Visually update Streamlit state
-                    with st.status("Thinking...", expanded=True) as status:
-                        for tool_call in response_msg.tool_calls:
-                            tool_name = tool_call.function.name
-                            tool_args = json.loads(tool_call.function.arguments)
+                with st.status("Analyzing Request Pipeline...", expanded=True) as status:
+                    for iteration in range(MAX_ITERATIONS):
+                        # Build full context payload via context injector (includes system prompt + history)
+                        messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"])
+                        
+                        response = await client.chat.completions.create(
+                            model="llama-3.3-70b-versatile",
+                            messages=messages_payload,
+                            temperature=0.2,  # Reduce temperature to greatly limit hallucination inaccuracies!
+                            tools=groq_tools,
+                            tool_choice="auto",
+                        )
+                        
+                        response_msg = response.choices[0].message
+                        
+                        # Parse Groq response decision matrix (Tools required??)
+                        if response_msg.tool_calls:
+                            status.update(label=f"Iteration {iteration+1}: Executing {len(response_msg.tool_calls)} local tools...")
                             
-                            st.write(f"Executing tool `{tool_name}` ...")
-                            
-                            try:
-                                # Direct request securely to underlying stdio background child Python server
-                                mcp_result = await session.call_tool(tool_name, arguments=tool_args)
-                                
-                                tool_result_content = ""
-                                if hasattr(mcp_result, 'content') and mcp_result.content:
-                                    tool_result_content = "\n".join([c.text for c in mcp_result.content if getattr(c, 'type', '') == "text"])
-                                
-                                # Standard error checking block    
-                                if getattr(mcp_result, 'isError', False):
-                                    tool_result_content = f"Tool Failure Error: {tool_result_content}"
-                                    
-                            except Exception as e:
-                                tool_result_content = f"Python SDK Execution Error: {str(e)}"
-                                
-                            # Persist tool result into ConversationBufferMemory
-                            st.session_state["memory"].add_tool_result(
-                                tool_call_id=tool_call.id,
-                                name=tool_name,
-                                content=str(tool_result_content)
+                            # Stage into ConversationBufferMemory with tool_calls list
+                            st.session_state["memory"].add_assistant_message(
+                                content=response_msg.content,
+                                tool_calls=[
+                                    {
+                                        "id": tc.id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc.function.name,
+                                            "arguments": tc.function.arguments
+                                        }
+                                    }
+                                    for tc in response_msg.tool_calls
+                                ]
                             )
                             
-                        status.update(label="Retrieved backend information properly!", state="complete", expanded=False)
-                    
-                    # Step 4: Build updated payload with injected tool results and stream final response
-                    second_messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"])
-                    second_response_stream = await client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=second_messages_payload,
-                        temperature=0.7,
-                        stream=True,
-                    )
-                    
-                    with st.chat_message("assistant"):
-                        placeholder = st.empty()
-                        full_response = ""
-                        
-                        # Consume Async Stream natively
-                        async for chunk in second_response_stream:
-                            if chunk.choices[0].delta.content is not None:
-                                full_response += chunk.choices[0].delta.content
-                                placeholder.markdown(full_response + "▌")
+                            for tool_call in response_msg.tool_calls:
+                                tool_name = tool_call.function.name
+                                tool_args = json.loads(tool_call.function.arguments)
                                 
-                        placeholder.markdown(full_response)
-                        # Persist assistant reply into memory buffer
-                        st.session_state["memory"].add_assistant_message(content=full_response)
-                        
-                else:
-                    # Direct generic conversational payload flow (No tool invoking needed)
-                    with st.chat_message("assistant"):
-                        text_content = response_msg.content or ""
-                        st.write(text_content)
-                        st.session_state["memory"].add_assistant_message(content=text_content)
-                
+                                st.write(f"⚙️ Running `{tool_name}` ...")
+                                
+                                try:
+                                    # Direct request securely to underlying stdio background child Python server
+                                    mcp_result = await session.call_tool(tool_name, arguments=tool_args)
+                                    
+                                    tool_result_content = ""
+                                    if hasattr(mcp_result, 'content') and mcp_result.content:
+                                        tool_result_content = "\n".join([c.text for c in mcp_result.content if getattr(c, 'type', '') == "text"])
+                                    
+                                    # Standard error checking block    
+                                    if getattr(mcp_result, 'isError', False):
+                                        tool_result_content = f"Tool Failure Error: {tool_result_content}"
+                                        
+                                except Exception as e:
+                                    tool_result_content = f"Python SDK Execution Error: {str(e)}"
+                                    
+                                # Persist tool result into ConversationBufferMemory
+                                st.session_state["memory"].add_tool_result(
+                                    tool_call_id=tool_call.id,
+                                    name=tool_name,
+                                    content=str(tool_result_content)
+                                )
+                                
+                            # Cycle back upwards in the loop to re-feed contexts to the LLM agent!
+                        else:
+                            # Finished! No tool calls returned. Standard response generation!
+                            status.update(label="Information Retrieval Completed!", state="complete", expanded=False)
+                            
+                            text_content = response_msg.content or "Sorry, I couldn't generate a fully certain response. Try being more specific."
+                            
+                            with st.chat_message("assistant"):
+                                placeholder = st.empty()
+                                displayed_text = ""
+                                chunk_size = 4
+                                # Custom Typewriter Micro-Interaction logic natively feeding chunks asynchronously!
+                                for i in range(0, len(text_content), chunk_size):
+                                    displayed_text += text_content[i:i+chunk_size]
+                                    placeholder.markdown(displayed_text + "▌")
+                                    await asyncio.sleep(0.01)
+                                placeholder.markdown(displayed_text)
+                                st.session_state["memory"].add_assistant_message(content=text_content)
+                            
+                            # Escape recursive iteration
+                            break
+                    else:
+                        status.update(label="Iteration Count Exceeded", state="error", expanded=True)
+                        st.error("Too many tools executed sequentially without a definitive answer. Context terminated to protect API quotas.")
+
                 # Flag successful pipeline completion
                 st.session_state["response_completed"] = True
                         
     except BaseException as e:
         # Silently swallow AnyIO/anyio TaskGroup teardown noise on Windows.
-        # These are raised when the stdio subprocess is cleaned up after a
-        # successful run and do NOT indicate a real failure.
-        if type(e).__name__ in ("ExceptionGroup", "BaseExceptionGroup"):
+        if type(e).__name__ in ("ExceptionGroup", "BaseExceptionGroup") and st.session_state.get("response_completed", False):
             pass
         else:
             import traceback

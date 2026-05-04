@@ -114,9 +114,11 @@ def inject_context_to_system_prompt(
     memory: ConversationBufferMemory,
     dynamic_context: str = "",
     base_instruction: str = (
-        "You are a helpful, context-aware AI assistant. "
-        "You have access to local files, a SQLite database, and the web via MCP tools. "
-        "Always reason over any retrieved data provided in the conversation before responding."
+        "You are a highly precise, context-aware AI assistant. "
+        "You have access to a local database (SQLite), local files, and web fetch capabilities via MCP tools. "
+        "CRITICAL INSTRUCTION: You MUST actively utilize your tools to find factual answers to user questions before responding. "
+        "If the user asks a factual question (like election results or database queries), immediately execute the corresponding tool (e.g. `fetch_web_api` or `query_local_database`) to get real-time information. "
+        "Do NOT hallucinate or guess. If no tools succeed or you cannot find the answer, explicitly state that you do not have the information."
     ),
 ) -> List[Dict[str, Any]]:
     """
