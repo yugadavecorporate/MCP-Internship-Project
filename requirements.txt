@@ -3,3 +3,4 @@ streamlit
 python-dotenv
 mcp
 httpx
+duckduckgo-search

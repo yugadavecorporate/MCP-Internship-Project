@@ -137,6 +137,33 @@ def fetch_web_api(url: str, method: str = "GET") -> str:
     except Exception as e:
         return f"Error making web request: {str(e)}"
 
+@mcp.tool()
+def search_web(query: str) -> str:
+    """
+    Search the web using DuckDuckGo to answer real-time questions, news, and general facts.
+    Returns the top 5 search result text snippets.
+    
+    Args:
+        query: The search term or question to look up.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=5))
+            if not results:
+                return "No results found on the web."
+            
+            formatted_results = []
+            for r in results:
+                title = r.get('title', 'No Title')
+                body = r.get('body', 'No Body')
+                href = r.get('href', 'No URL')
+                formatted_results.append(f"Title: {title}\nSnippet: {body}\nSource: {href}")
+                
+            return ("\n\n---\n\n".join(formatted_results))[:4000]
+    except Exception as e:
+        return f"Web search failed: {str(e)}"
+
 if __name__ == "__main__":
     # Start the FastMCP server using standard I/O for communication with the host client
     mcp.run()
