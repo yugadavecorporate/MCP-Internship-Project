@@ -9,8 +9,43 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from context_manager import ConversationBufferMemory, inject_context_to_system_prompt
 
+import sqlite3
+
 # Load environment variables from .env file
 load_dotenv()
+
+# ── Persistent Chat History DB Helper ─────────────────────────────────────────
+DB_PATH = "local_data.db"
+
+def _init_chat_history_table():
+    """Ensure the chat_history table exists in local_data.db."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+            role      TEXT    NOT NULL,
+            message   TEXT    NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_chat_to_db(role: str, message: str):
+    """Persist a single chat turn (user or assistant) into local_data.db."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO chat_history (role, message) VALUES (?, ?)",
+            (role, message)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Never let a DB write break the chat UI
+
+_init_chat_history_table()
+# ──────────────────────────────────────────────────────────────────────────────
 
 # Check if API Key is available
 api_key = os.getenv("GROQ_API_KEY")
@@ -85,8 +120,12 @@ async def process_user_input():
                 
                 with st.status("Analyzing Request Pipeline...", expanded=True) as status:
                     for iteration in range(MAX_ITERATIONS):
+                        import datetime
+                        current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        ctx = f"The current system date and local time is: {current_time_str}."
+                        
                         # Build full context payload via context injector (includes system prompt + history)
-                        messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"])
+                        messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"], dynamic_context=ctx)
                         
                         import groq
                         try:
@@ -175,6 +214,7 @@ async def process_user_input():
                                     await asyncio.sleep(0.01)
                                 placeholder.markdown(displayed_text)
                                 st.session_state["memory"].add_assistant_message(content=text_content)
+                                save_chat_to_db("assistant", text_content)  # ← persist to SQLite
                             
                             # Escape recursive iteration
                             break
@@ -201,6 +241,7 @@ async def process_user_input():
 if user_input := st.chat_input("Say something..."):
     # Append user message to memory and render it visually
     st.session_state["memory"].add_user_message(user_input)
+    save_chat_to_db("user", user_input)          # ← persist to SQLite
     st.session_state["response_completed"] = False  # Reset state tracking
     with st.chat_message("user"):
         st.write(user_input)
