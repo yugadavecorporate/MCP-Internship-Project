@@ -1,0 +1,5 @@
+groq>=0.4.2
+streamlit
+python-dotenv
+mcp
+httpx
