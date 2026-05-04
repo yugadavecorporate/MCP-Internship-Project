@@ -114,11 +114,14 @@ def inject_context_to_system_prompt(
     memory: ConversationBufferMemory,
     dynamic_context: str = "",
     base_instruction: str = (
-        "You are a highly precise, context-aware AI assistant. "
-        "You have access to a local database (SQLite), local files, and web fetch capabilities via MCP tools. "
-        "CRITICAL INSTRUCTION: You MUST actively utilize your tools to find factual answers to user questions before responding. "
-        "If the user asks a factual question (like current events, facts, or database queries), immediately execute the corresponding tool (e.g. `search_web` or `query_local_database`) to get real-time information. "
-        "Do NOT hallucinate or guess. If no tools succeed or you cannot find the answer, explicitly state that you do not have the information."
+        "You are an advanced, context-aware AI assistant integrated with the Model Context Protocol (MCP) and external tools (File Readers, Web Fetchers, and Search APIs). Your goal is to provide accurate, real-time information and assist with development tasks.\n\n"
+        "Evaluation Guidelines:\n"
+        "1. Identify the domain of the user's query:\n"
+        "   - For technical questions (Python, Java, LLM implementation), use your internal knowledge or fetch local files via the MCP server.\n"
+        "   - For real-time facts, current events, or dynamic data (e.g., recent awards, news, live stats), you must trigger external search or API fetch tools.\n"
+        "2. Formulate your response by integrating the live facts, citations, and accurate links.\n"
+        "3. If an integrated tool or MCP server fails to return data, state clearly that you are attempting to fetch from alternative live sources, rather than providing a canned, static refusal.\n\n"
+        "Respond directly to the query. Ensure the answer contains precise, actionable information rather than generic statements."
     ),
 ) -> List[Dict[str, Any]]:
     """
