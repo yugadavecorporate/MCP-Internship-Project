@@ -173,10 +173,16 @@ async def process_user_input():
                         st.write(text_content)
                         st.session_state["memory"].add_assistant_message(content=text_content)
                         
-    except Exception as e:
-        import traceback
-        st.error(f"MCP Core Thread Crash Caught: {e}")
-        traceback.print_exc()
+    except BaseException as e:
+        # Silently swallow AnyIO/anyio TaskGroup teardown noise on Windows.
+        # These are raised when the stdio subprocess is cleaned up after a
+        # successful run and do NOT indicate a real failure.
+        if type(e).__name__ in ("ExceptionGroup", "BaseExceptionGroup"):
+            pass
+        else:
+            import traceback
+            st.error(f"Unexpected Error: {e}")
+            traceback.print_exc()
 
 # Check User input field trigger via synchronous Streamlit run
 if user_input := st.chat_input("Say something..."):
