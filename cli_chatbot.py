@@ -88,13 +88,24 @@ async def process_user_input():
                         # Build full context payload via context injector (includes system prompt + history)
                         messages_payload = inject_context_to_system_prompt(memory=st.session_state["memory"])
                         
-                        response = await client.chat.completions.create(
-                            model="llama-3.3-70b-versatile",
-                            messages=messages_payload,
-                            temperature=0.2,  # Reduce temperature to greatly limit hallucination inaccuracies!
-                            tools=groq_tools,
-                            tool_choice="auto",
-                        )
+                        import groq
+                        try:
+                            response = await client.chat.completions.create(
+                                model="llama-3.3-70b-versatile",
+                                messages=messages_payload,
+                                temperature=0.2,  # Reduce temperature to greatly limit hallucination inaccuracies!
+                                tools=groq_tools,
+                                tool_choice="auto",
+                            )
+                        except groq.BadRequestError as e:
+                            # If Llama-3 hallucinates the JSON format (e.g. outputs XML tags instead), Groq throws 400.
+                            status.update(label="Model formatting error detected, attempting safe fallback...", state="running")
+                            # Fallback without giving it tools so it doesn't crash the UI!
+                            response = await client.chat.completions.create(
+                                model="llama-3.3-70b-versatile",
+                                messages=messages_payload + [{"role": "system", "content": "Tool usage failed. Apologize and answer using your base knowledge."}],
+                                temperature=0.2,
+                            )
                         
                         response_msg = response.choices[0].message
                         
@@ -181,7 +192,10 @@ async def process_user_input():
         else:
             import traceback
             st.error(f"Unexpected Error: {e}")
-            traceback.print_exc()
+            st.code(traceback.format_exc(), language="text")
+            if hasattr(e, "exceptions"):
+                for idx, sub in enumerate(e.exceptions):
+                    st.error(f"Sub-Exception [{idx}]: {repr(sub)}")
 
 # Check User input field trigger via synchronous Streamlit run
 if user_input := st.chat_input("Say something..."):
